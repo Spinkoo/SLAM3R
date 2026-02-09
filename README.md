@@ -60,6 +60,7 @@ TL;DR: A real-time RGB SLAM system that performs dense 3D reconstruction via poi
   - [Replica dataset](#replica-dataset)
   - [Self-captured outdoor data](#self-captured-outdoor-data)
 - [Gradio interface](#gradio-interface)
+- [Pyoctomap Integration](#pyoctomap-integration)
 - [Evaluation on the Replica dataset](#evaluation-on-the-replica-dataset)
 - [Training](#training)
   - [Datasets](#datasets)
@@ -160,6 +161,31 @@ python app.py --online
 Here is a demo GIF for the Gradio interface for online reconstruction (accelerated). A Viser viewer is plugged in to show the incremental reconstruction process.
 
 <img src="media/gradio_online.gif" style="zoom: 66%;" />
+
+
+## Pyoctomap Integration
+
+We provide integration with [pyoctomap](https://github.com/OctoMap/pyoctomap) for efficient octree-based 3D representation. This allows you to build incremental octree maps from SLAM3R's point cloud reconstructions, which is useful for robotics applications, path planning, and efficient 3D storage.
+
+### Quick Start
+
+```bash
+# Install pyoctomap
+pip install pyoctomap
+
+# Run reconstruction with octree building
+bash pyoctomap_integration/example_replica.sh
+```
+
+### Features
+
+- **Incremental Octree Building**: Build octree maps as SLAM3R processes frames
+- **Color Support**: Preserve RGB colors from SLAM3R reconstruction
+- **Efficient Storage**: Compressed .bt (binary) or .ot (text) octree formats
+- **ROS Compatible**: Export octrees compatible with ROS octomap packages
+- **Batch Processing**: Optimized insertion for better performance
+
+For detailed documentation, see [pyoctomap_integration/README.md](./pyoctomap_integration/README.md).
 
 
 ## Evaluation on the Replica dataset
