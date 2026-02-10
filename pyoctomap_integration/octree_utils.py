@@ -31,6 +31,14 @@ def create_color_octree(resolution: float = 0.05) -> 'pyoctomap.ColorOcTree':
         raise ImportError("pyoctomap is required. Install with: pip install pyoctomap")
     
     tree = pyoctomap.ColorOcTree(resolution)
+    
+    # Ensure colors are enabled
+    try:
+        if not tree.isColorEnabled():
+            tree.enableColor()
+    except:
+        pass  # Some versions might not have this method
+    
     return tree
 
 
@@ -135,6 +143,13 @@ def insert_pointcloud_with_color(
     # Ensure points are contiguous float64
     points = np.ascontiguousarray(points.astype(np.float64))
     
+    # Ensure colors are enabled before insertion
+    try:
+        if not tree.isColorEnabled():
+            tree.enableColor()
+    except:
+        pass  # Some versions might not have this method
+    
     # Insert point cloud
     try:
         # Try different parameter names for pyoctomap API compatibility
@@ -148,13 +163,13 @@ def insert_pointcloud_with_color(
                 lazy_eval=lazy_eval
             )
         except TypeError:
-            # Try with max_range instead
+            # Try with maxrange (no underscore)
             try:
                 tree.insertPointCloudWithColor(
                     points,
                     colors,
                     sensor_origin=sensor_origin,
-                    max_range=max_range if max_range > 0 else -1.0,
+                    maxrange=max_range if max_range > 0 else -1.0,
                     lazy_eval=lazy_eval
                 )
             except TypeError:
