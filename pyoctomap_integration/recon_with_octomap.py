@@ -6,10 +6,12 @@ This script runs SLAM3R inference and incrementally builds an octree representat
 import argparse
 import os
 import glob
+import math
 import numpy as np
 import torch
 from tqdm import tqdm
 from pathlib import Path
+import cv2
 
 from slam3r.pipeline.recon_offline_pipeline import scene_recon_pipeline_offline
 from slam3r.datasets.wild_seq import Seq_Data
@@ -134,11 +136,13 @@ def build_octree_from_reconstruction(
         if isinstance(pts3d_world, torch.Tensor):
             pts3d_world = to_numpy(pts3d_world)
         
-        # Handle different tensor shapes
+        # Handle different tensor shapes and preserve spatial correspondence
+        original_shape = None
         if pts3d_world.ndim == 4:  # (B, H, W, 3)
             pts3d_world = pts3d_world[0]
         if pts3d_world.ndim == 3:  # (H, W, 3)
             H, W, _ = pts3d_world.shape
+            original_shape = (H, W)
             pts3d_world = pts3d_world.reshape(-1, 3)
         else:
             continue
@@ -155,25 +159,81 @@ def build_octree_from_reconstruction(
             
             # Filter by confidence
             valid_mask = conf > conf_thres
-            pts3d_world = pts3d_world[valid_mask]
         else:
             # No confidence filtering
             valid_mask = np.ones(len(pts3d_world), dtype=bool)
         
-        if len(pts3d_world) == 0:
-            continue
-        
-        # Get colors
+        # Get colors from RGB images BEFORE applying mask - ensure pixel-perfect correspondence
         if frame_id < len(rgb_imgs):
             rgb = rgb_imgs[frame_id]
             if isinstance(rgb, torch.Tensor):
                 rgb = to_numpy(rgb)
-            if rgb.ndim == 3:  # (H, W, 3)
+            
+            # Ensure RGB is in correct format (H, W, 3) matching point cloud dimensions
+            if rgb.ndim == 3:
+                # Check if dimensions match point cloud
+                if original_shape and rgb.shape[:2] != original_shape:
+                    # Resize RGB to match point cloud dimensions for pixel-perfect correspondence
+                    rgb = cv2.resize(rgb, (original_shape[1], original_shape[0]), interpolation=cv2.INTER_LINEAR)
+                
+                # Reshape to match point cloud layout (row-major order, same as pts3d_world)
                 rgb = rgb.reshape(-1, 3)
-            rgb = rgb[valid_mask] if len(valid_mask) == len(rgb) else rgb
+            elif rgb.ndim == 4:  # (B, H, W, 3)
+                rgb = rgb[0]
+                if original_shape and rgb.shape[:2] != original_shape:
+                    rgb = cv2.resize(rgb, (original_shape[1], original_shape[0]), interpolation=cv2.INTER_LINEAR)
+                rgb = rgb.reshape(-1, 3)
+            else:
+                # If already flattened, check size
+                if len(rgb) != original_shape[0] * original_shape[1] if original_shape else len(pts3d_world):
+                    print(f"   Warning: RGB size {len(rgb)} doesn't match point cloud size, resizing...")
+                    if original_shape:
+                        # Reshape to 2D, resize, then flatten
+                        rgb_2d = rgb.reshape(-1, 3) if rgb.ndim == 1 else rgb
+                        if rgb_2d.shape[0] != original_shape[0] * original_shape[1]:
+                            # Need to reshape to 2D first
+                            h = int(math.sqrt(len(rgb_2d)))
+                            w = len(rgb_2d) // h
+                            rgb_2d = rgb_2d.reshape(h, w, 3)
+                            rgb_2d = cv2.resize(rgb_2d, (original_shape[1], original_shape[0]), interpolation=cv2.INTER_LINEAR)
+                            rgb = rgb_2d.reshape(-1, 3)
+                        else:
+                            rgb = rgb_2d
+            
+            # Ensure RGB is in [0, 255] range (uint8) for proper texture mapping
+            if rgb.max() <= 1.0:
+                # Colors are normalized [0, 1], convert to [0, 255]
+                rgb = (rgb * 255.0).clip(0, 255).astype(np.uint8)
+            else:
+                # Clip to valid range and ensure uint8
+                rgb = rgb.clip(0, 255).astype(np.uint8)
+            
+            # Apply the same confidence mask to colors as points (pixel-perfect correspondence)
+            if len(valid_mask) == len(rgb):
+                rgb = rgb[valid_mask]
+            else:
+                print(f"   Warning: RGB size {len(rgb)} doesn't match mask size {len(valid_mask)}")
+                # Use default colors if size mismatch
+                rgb = np.ones((len(pts3d_world[valid_mask]), 3), dtype=np.uint8) * 128
         else:
             # Default color if no image available
-            rgb = np.ones((len(pts3d_world), 3), dtype=np.float32) * 128
+            rgb = np.ones((len(pts3d_world[valid_mask]) if valid_mask is not None else len(pts3d_world), 3), dtype=np.uint8) * 128
+        
+        # Apply mask to points AFTER getting colors
+        pts3d_world = pts3d_world[valid_mask]
+        
+        if len(pts3d_world) == 0:
+            continue
+        
+        # Final check: ensure colors match points
+        if len(rgb) != len(pts3d_world):
+            print(f"   Warning: Final RGB size {len(rgb)} doesn't match points {len(pts3d_world)}, adjusting...")
+            if len(rgb) > len(pts3d_world):
+                rgb = rgb[:len(pts3d_world)]
+            else:
+                # Pad with last color
+                padding = np.tile(rgb[-1:] if len(rgb) > 0 else [[128, 128, 128]], (len(pts3d_world) - len(rgb), 1))
+                rgb = np.vstack([rgb, padding]) if len(rgb) > 0 else padding
         
         # Get sensor origin (camera position)
         sensor_origin = None
