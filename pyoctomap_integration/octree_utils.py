@@ -208,7 +208,19 @@ def save_octree(tree: 'pyoctomap.ColorOcTree', filepath: str, binary: bool = Tru
     if binary:
         if not filepath.endswith('.bt'):
             filepath = filepath.replace('.ot', '.bt')
-        tree.writeBinary(filepath)
+        # Try writeBinary - if it fails, try alternative methods
+        try:
+            tree.writeBinary(filepath)
+        except Exception as e:
+            print(f"   ⚠️  writeBinary() failed: {e}")
+            # Try write() as fallback (might work for ColorOcTree)
+            try:
+                filepath_ot = filepath.replace('.bt', '.ot')
+                tree.write(filepath_ot)
+                print(f"   Saved as text format instead: {filepath_ot}")
+                filepath = filepath_ot
+            except Exception as e2:
+                raise RuntimeError(f"Failed to save octree: {e2}")
     else:
         if not filepath.endswith('.ot'):
             filepath = filepath.replace('.bt', '.ot')
