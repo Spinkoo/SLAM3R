@@ -123,19 +123,8 @@ def build_octree_from_reconstruction(
     
     # Verify it's a ColorOcTree
     print(f"   Tree type: {type(tree).__name__}")
-    try:
-        color_enabled = tree.isColorEnabled()
-        print(f"   Colors enabled: {color_enabled}")
-        if not color_enabled:
-            print(f"   ⚠️  WARNING: ColorOcTree created but colors are not enabled!")
-            print(f"   Attempting to enable colors...")
-            try:
-                tree.enableColor()
-                print(f"   ✅ Colors enabled successfully")
-            except:
-                print(f"   ⚠️  Could not enable colors")
-    except Exception as e:
-        print(f"   ⚠️  Could not check/enable colors: {e}")
+    # ColorOcTree should support colors by default
+    # Some pyoctomap versions don't have isColorEnabled() method
     
     num_frames = len(input_views)
     num_inserted = 0
@@ -274,10 +263,6 @@ def build_octree_from_reconstruction(
             print(f"   - RGB shape: {rgb.shape}, dtype: {rgb.dtype}, range: [{rgb.min()}, {rgb.max()}]")
             print(f"   - Points shape: {pts3d_world.shape}")
             print(f"   - Tree type: {type(tree).__name__}")
-            try:
-                print(f"   - Colors enabled: {tree.isColorEnabled()}")
-            except:
-                pass
     
     print(f"\n>> Inserted {num_inserted} points into octree")
     stats = get_octree_stats(tree)
@@ -516,14 +501,10 @@ def main():
         use_camera_poses=args.use_camera_poses
     )
     
-    # Verify tree type and color support
+    # Verify tree type
     print(f"\n>> Octree type check:")
     print(f"   Tree type: {type(tree).__name__}")
-    try:
-        is_color_enabled = tree.isColorEnabled()
-        print(f"   Colors enabled: {is_color_enabled}")
-    except:
-        print(f"   Could not check color status")
+    # ColorOcTree should support colors by default
     
     # Save octree
     print("\n>> Saving octree...")

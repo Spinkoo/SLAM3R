@@ -32,12 +32,9 @@ def create_color_octree(resolution: float = 0.05) -> 'pyoctomap.ColorOcTree':
     
     tree = pyoctomap.ColorOcTree(resolution)
     
-    # Ensure colors are enabled
-    try:
-        if not tree.isColorEnabled():
-            tree.enableColor()
-    except:
-        pass  # Some versions might not have this method
+    # ColorOcTree should have colors enabled by default
+    # Some versions don't have isColorEnabled() method, so we skip the check
+    # The fact that it's a ColorOcTree means it supports colors
     
     return tree
 
@@ -143,12 +140,8 @@ def insert_pointcloud_with_color(
     # Ensure points are contiguous float64
     points = np.ascontiguousarray(points.astype(np.float64))
     
-    # Ensure colors are enabled before insertion
-    try:
-        if not tree.isColorEnabled():
-            tree.enableColor()
-    except:
-        pass  # Some versions might not have this method
+    # ColorOcTree should have colors enabled by default
+    # No need to check/enable - ColorOcTree always supports colors
     
     # Insert point cloud
     try:
@@ -205,16 +198,9 @@ def save_octree(tree: 'pyoctomap.ColorOcTree', filepath: str, binary: bool = Tru
     if 'Color' not in tree_type:
         raise ValueError(f"Tree must be a ColorOcTree, got {tree_type}! Colors cannot be saved.")
     
-    # Ensure colors are enabled BEFORE saving
-    try:
-        if not tree.isColorEnabled():
-            print("   Enabling colors in octree before saving...")
-            tree.enableColor()
-            if not tree.isColorEnabled():
-                print("   ⚠️  WARNING: Could not enable colors! File may be saved without colors.")
-    except Exception as e:
-        print(f"   ⚠️  WARNING: Could not check/enable colors: {e}")
-        print(f"   File may be saved without colors.")
+    # ColorOcTree should have colors enabled by default
+    # Some pyoctomap versions don't have isColorEnabled() method
+    # We assume ColorOcTree always supports colors
     
     # Ensure directory exists
     os.makedirs(os.path.dirname(filepath) if os.path.dirname(filepath) else '.', exist_ok=True)
@@ -232,20 +218,24 @@ def save_octree(tree: 'pyoctomap.ColorOcTree', filepath: str, binary: bool = Tru
     print(f"   Resolution: {tree.getResolution():.4f} m")
     print(f"   Size: {tree.size()} nodes")
     print(f"   Tree type: {tree_type}")
-    try:
-        print(f"   Colors enabled: {tree.isColorEnabled()}")
-    except:
-        pass
     
     # Verify the saved file can be loaded as ColorOcTree
     try:
         test_tree = pyoctomap.ColorOcTree(filepath)
-        test_colors_enabled = test_tree.isColorEnabled()
-        print(f"   ✅ Verified: File can be loaded as ColorOcTree (colors enabled: {test_colors_enabled})")
+        print(f"   ✅ Verified: File can be loaded as ColorOcTree")
         del test_tree
     except Exception as e:
-        print(f"   ⚠️  WARNING: Saved file cannot be loaded as ColorOcTree: {e}")
-        print(f"   The file may have been saved as a simple OcTree without colors.")
+        error_str = str(e)
+        print(f"   ⚠️  WARNING: Saved file cannot be loaded as ColorOcTree")
+        print(f"   Error: {error_str}")
+        # Try to load as simple OcTree to see if it saved at all
+        try:
+            test_tree = pyoctomap.OcTree(filepath)
+            print(f"   ⚠️  File was saved as simple OcTree (no colors)")
+            print(f"   This may be a pyoctomap version issue - ColorOcTree.writeBinary() may not work correctly")
+            del test_tree
+        except:
+            pass
 
 
 def load_octree(filepath: str) -> 'pyoctomap.ColorOcTree':
